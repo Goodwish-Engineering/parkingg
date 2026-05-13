@@ -49,7 +49,6 @@ class _MemberRegistrationScreenState extends State<MemberRegistrationScreen> {
   void _handleNext() {
     if (_formKey.currentState!.validate()) {
       FocusScope.of(context).unfocus();
-
       widget.data.name = _nameController.text;
       widget.data.contactNo = _contactController.text;
       widget.data.vatRegistrationNo = _vatController.text;

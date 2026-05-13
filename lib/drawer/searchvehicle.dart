@@ -7,7 +7,6 @@ import 'package:parking/auth/api_endpoints.dart';
 import 'package:parking/auth/auth_service.dart';
 import 'package:parking/database/helper_class.dart';
 import 'dart:convert';
-
 import 'package:parking/home/models/vehicleratemodel.dart';
 
 class SearchLostVehicleScreen extends StatefulWidget {
@@ -317,11 +316,18 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
       );
 
       print(checkOutResponse);
-      await _dbHelper.markRecordsAsSynced([]);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Checkout successful! Slip printed.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
       Future.delayed(const Duration(seconds: 1), () {
         if (!mounted) return;
-
-        Navigator.pop(context);
+        _resetState();
       });
     } catch (error) {
       if (!mounted) return;
@@ -336,6 +342,20 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         isLoading = false;
       });
     }
+  }
+
+  void _resetState() {
+    setState(() {
+      _searchResults = [];
+      _vehicleNumberController.clear();
+      parkingFee = null;
+      receiptId = "";
+      vehicleNumber = "";
+      vehicleType = "";
+      vehicleType = "";
+      checkinTime = null;
+      _isOffline = false;
+    });
   }
 
   @override
