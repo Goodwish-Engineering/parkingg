@@ -1,0 +1,92 @@
+// ignore_for_file: avoid_print
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:parking/auth/api_endpoints.dart';
+import 'package:parking/auth/auth_service.dart';
+
+class VehicleService {
+  Future<Map<String, dynamic>> checkIn({
+    required String receiptId,
+    required String vehicleNumber,
+    required String vehicleType,
+    required String checkinTime,
+  }) async {
+    final url = Uri.parse('${ApiEndpoints.baseUrl}parkinginfo/checkin/');
+    final body = json.encode({
+      'receipt_id': receiptId,
+      'vehicle_number': vehicleNumber,
+      'vehicle_type': vehicleType,
+      'checkin_time': checkinTime,
+    });
+
+    try {
+      final token = await SecureStorage.getAccessToken();
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: body,
+      );
+      print('Response Status: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        return {
+          'status_code': response.statusCode,
+          'response_body': response.body,
+        };
+      }
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  // Updated checkOut method to be async
+  Future<Map<String, dynamic>> checkOut({
+    required String receiptId,
+    required String vehicleNumber,
+    required String vehicleType,
+    required String checkoutTime,
+    required double amount,
+  }) async {
+    final url = Uri.parse('${ApiEndpoints.baseUrl}parkinginfo/checkout/');
+    final body = json.encode({
+      'receipt_id': receiptId,
+      'vehicle_number': vehicleNumber,
+      'vehicle_type': vehicleType,
+      'checkout_time': checkoutTime,
+      'amount': amount,
+    });
+
+    try {
+      final token = await SecureStorage.getAccessToken();
+
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: body,
+      );
+      print('Response Status: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        return {
+          'error': 'Failed to check out',
+          'status_code': response.statusCode,
+          'response_body': response.body,
+        };
+      }
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+}
