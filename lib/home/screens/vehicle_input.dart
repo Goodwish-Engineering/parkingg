@@ -92,6 +92,7 @@ class _VehicleDetailsScreenState extends State<VehicleDetailsScreen> {
     if (_vcontroller.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
+          behavior: SnackBarBehavior.floating,
           content: Text('Please enter a vehicle number'),
           backgroundColor: Colors.red,
         ),
@@ -175,7 +176,6 @@ class _VehicleDetailsScreenState extends State<VehicleDetailsScreen> {
         );
 
         print("checkin response : $checkInResponse");
-        await _dbHelper.markRecordsAsSynced([]);
       } catch (e) {
         print("Online check-in failed, will retry later: $e");
       }
@@ -184,8 +184,10 @@ class _VehicleDetailsScreenState extends State<VehicleDetailsScreen> {
     } catch (e) {
       print('Printing error: $e');
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
+            behavior: SnackBarBehavior.floating,
             content: Text(
               'An error occurred while printing. Please try again.',
             ),

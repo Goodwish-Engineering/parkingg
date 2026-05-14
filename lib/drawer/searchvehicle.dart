@@ -235,7 +235,6 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
       DateTime now = DateTime.now();
       String ctt = formatDateTime(now);
       String checkoutDate = "${now.year}/${now.month}/${now.day}";
-
       String hour = (now.hour % 12 == 0) ? '12' : (now.hour % 12).toString();
       String amPm = now.hour < 12 ? 'AM' : 'PM';
       String checkoutTime =
@@ -268,7 +267,6 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
 
       await _channel.invokeMethod('bindPrinterService');
       await _channel.invokeMethod('initializePrinter');
-
       await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 35});
       await _channel.invokeMethod('setPrinterPrintAlignment', {'alignment': 1});
       await _channel.invokeMethod('printText', {'text': heading1});
@@ -291,7 +289,6 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
             'Duration: $duration',
       });
       await _channel.invokeMethod('printerPerformPrint', {'feedLines': 20});
-
       await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 40});
       await _channel.invokeMethod('setPrinterPrintAlignment', {'alignment': 1});
       await _channel.invokeMethod('printText', {
@@ -318,9 +315,11 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
       print(checkOutResponse);
 
       if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('✅ Checkout successful! Slip printed.'),
+          behavior: SnackBarBehavior.floating,
           backgroundColor: Colors.green,
           duration: Duration(seconds: 2),
         ),
@@ -331,9 +330,11 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
       });
     } catch (error) {
       if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error during checkout'),
+          behavior: SnackBarBehavior.floating,
           backgroundColor: Colors.red,
         ),
       );
@@ -390,9 +391,11 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
       print('Error fetching vehicle rates and print details: $e');
       // Show error to user
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to load parking rates'),
+            behavior: SnackBarBehavior.floating,
             backgroundColor: Colors.red,
           ),
         );

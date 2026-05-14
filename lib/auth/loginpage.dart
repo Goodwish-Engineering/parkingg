@@ -1,5 +1,6 @@
 // ignore_for_file: avoid_print
 import 'dart:convert';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:parking/auth/api_endpoints.dart';
@@ -107,9 +108,11 @@ class _LoginScreenState extends State<LoginScreen> {
             footerText: parkingSlipDetails['footer_text'] ?? '',
           );
         }
-
         if (data['parking_rates'] != null) {
           await SecureStorage.saveParkingRates(data['parking_rates']);
+          if (!mounted) return;
+
+          await _prewarmImageCache(data['parking_rates'], context);
         }
 
         if (!mounted) return;
@@ -141,6 +144,19 @@ class _LoginScreenState extends State<LoginScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  // In your auth service / login handler, after saving rates:
+  Future<void> _prewarmImageCache(
+    List<dynamic> parkingRates,
+    BuildContext context,
+  ) async {
+    for (final rate in parkingRates) {
+      final iconUrl = rate['icon'] as String?;
+      if (iconUrl != null && iconUrl.isNotEmpty) {
+        await precacheImage(CachedNetworkImageProvider(iconUrl), context);
+      }
     }
   }
 

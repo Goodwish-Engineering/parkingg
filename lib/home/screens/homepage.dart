@@ -1,4 +1,5 @@
 // ignore_for_file: avoid_print
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:parking/auth/auth_service.dart';
 import 'package:parking/checkout/checkout_screen.dart';
@@ -60,33 +61,27 @@ class _HomepageState extends State<Homepage> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: iconUrl != null && iconUrl.isNotEmpty
-                  ? Image.network(
-                      iconUrl,
+                  ? CachedNetworkImage(
+                      imageUrl: iconUrl,
                       fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Icon(
-                          Icons.directions_car,
-                          size: 70,
-                          color: const Color(0xFF0B1B4D),
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Center(
-                          child: CircularProgressIndicator(
-                            value: loadingProgress.expectedTotalBytes != null
-                                ? loadingProgress.cumulativeBytesLoaded /
-                                      loadingProgress.expectedTotalBytes!
-                                : null,
-                            color: const Color(0xFF0B1B4D),
-                          ),
-                        );
-                      },
+                      // Shown while downloading (first time only)
+                      placeholder: (context, url) => const Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF0B1B4D),
+                        ),
+                      ),
+                      // Shown if URL is broken or never cached + no internet
+                      errorWidget: (context, url, error) => const Icon(
+                        Icons.directions_car,
+                        size: 70,
+                        color: Color(0xFF0B1B4D),
+                      ),
                     )
-                  : Icon(
+                  : const Icon(
                       Icons.directions_car,
                       size: 70,
-                      color: const Color(0xFF0B1B4D),
+                      color: Color(0xFF0B1B4D),
                     ),
             ),
             const SizedBox(height: 12),
@@ -166,7 +161,6 @@ class _HomepageState extends State<Homepage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF668DAF),
-
       body: SafeArea(
         bottom: false,
         child: Column(

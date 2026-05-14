@@ -45,6 +45,8 @@ dependencies:
   flutter_launcher_icons: ^0.14.4
   nepali_date_picker: ^7.0.1
   nepali_utils: ^3.0.8
+  cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
 
 dev_dependencies:
   flutter_test:
