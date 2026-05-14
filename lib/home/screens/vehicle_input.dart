@@ -51,7 +51,7 @@ class _VehicleDetailsScreenState extends State<VehicleDetailsScreen> {
     _loadAllData();
   }
 
-  void _initializeData() {
+  void _initializeData() async {
     // Initialize parking slip details
     heading1 = widget.parkingSlipDetails['heading1'] ?? '';
     heading2 = widget.parkingSlipDetails['heading2'] ?? '';
@@ -64,6 +64,7 @@ class _VehicleDetailsScreenState extends State<VehicleDetailsScreen> {
     List<String> nameParts = fullName.split(' ');
     firstname = nameParts.isNotEmpty ? nameParts[0] : '';
     lastname = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+   
   }
 
   @override

@@ -35,6 +35,8 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
   String vehicleNumber = "";
   String vehicleType = "";
   DateTime? co;
+    int freeTime = 0;
+
 
   // Add state variables to store fetched data
   List<VehicleRate> vehicleRates = [];
@@ -50,7 +52,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
           : DateTime.parse(checkInTimeStr);
 
       final vehicleType = data['vehicle_type'] as String;
-      final now = DateTime.now();
+      final now = DateTime.now();   
       final duration = now.difference(checkInTime).inMinutes;
 
       // Find matching vehicle rate from vehicleRates state variable
@@ -65,7 +67,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         final hourlyRate = vehicleRate.hourlyRate;
         final halfHourlyRate = vehicleRate.halfHourlyRate;
 
-        if (duration <= 0) {
+        if (duration <= freeTime) {
           return 0.0;
         } else if (duration <= 30) {
           return halfHourlyRate;
@@ -79,7 +81,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         final halfHourlyRate = vehicleRate.halfHourlyRate;
         final hourlyRate = vehicleRate.hourlyRate;
 
-        if (duration <= 0) {
+        if (duration <= freeTime) {
           return 0.0;
         } else if (duration <= 30) {
           return halfHourlyRate;
@@ -363,6 +365,15 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
   void initState() {
     super.initState();
     fetchvehilceratesandprintdetails();
+    fetchfreetime();
+
+  }
+ Future<void> fetchfreetime() async {
+    final value = await SecureStorage.getFreeTime();
+
+    setState(() {
+      freeTime = value;
+    });
   }
 
   Future<void> fetchvehilceratesandprintdetails() async {

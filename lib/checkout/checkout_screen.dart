@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:parking/api/checkincheckout.dart';
+import 'package:parking/auth/auth_service.dart';
 import 'package:parking/database/helper_class.dart';
 import 'package:parking/home/models/vehicleratemodel.dart';
 import 'package:parking/home/screens/homepage.dart';
@@ -40,6 +41,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
   final bool _showCamera = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
   final VehicleService vehicleService = VehicleService();
+  int freeTime = 0;
 
   @override
   void initState() {
@@ -48,6 +50,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     _initializeCamera();
     _setupScannerListener();
     _initPrinter();
+    fetchfreetime();
   }
 
   @override
@@ -55,6 +58,14 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     WidgetsBinding.instance.removeObserver(this);
     // Do NOT dispose _cameraController here since it's managed by CameraManager
     super.dispose();
+  }
+
+  Future<void> fetchfreetime() async {
+    final value = await SecureStorage.getFreeTime();
+
+    setState(() {
+      freeTime = value;
+    });
   }
 
   Future<void> _initializeCamera() async {
@@ -174,7 +185,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         final hourlyRate = vehicleRate.hourlyRate;
         final halfHourlyRate = vehicleRate.halfHourlyRate;
 
-        if (duration <= 0) {
+        if (duration <= freeTime) {
           return 0.0;
         } else if (duration <= 30) {
           return halfHourlyRate;
@@ -188,7 +199,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         final halfHourlyRate = vehicleRate.halfHourlyRate;
         final hourlyRate = vehicleRate.hourlyRate;
 
-        if (duration <= 0) {
+        if (duration <= freeTime) {
           return 0.0;
         } else if (duration <= 30) {
           return halfHourlyRate;

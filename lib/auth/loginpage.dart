@@ -96,6 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
           refreshToken: data['refresh'],
           fullName: data['full_name'],
           role: data['role'],
+          freeTime: data['free_time'],
         );
 
         if (data['parking_slip_details'] != null) {

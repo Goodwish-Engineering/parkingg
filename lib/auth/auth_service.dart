@@ -11,6 +11,7 @@ class SecureStorage {
   static const roleKey = 'role';
   static const idkey = 'id';
   static const baseUrlKey = 'base_url';
+  static const freeTimeKey = 'free_time'; // 👈 Added
 
   // Parking slip heading keys
   static const heading1Key = 'parking_slip_heading1';
@@ -23,7 +24,6 @@ class SecureStorage {
     await _storage.write(key: baseUrlKey, value: baseUrl);
   }
 
-  /// Get base URL
   static Future<String?> getBaseUrl() async {
     return await _storage.read(key: baseUrlKey);
   }
@@ -35,12 +35,14 @@ class SecureStorage {
     required String fullName,
     required String role,
     required String id,
+    required int freeTime, // 👈 Added
   }) async {
     await _storage.write(key: idkey, value: id);
     await _storage.write(key: accessTokenKey, value: accessToken);
     await _storage.write(key: refreshTokenKey, value: refreshToken);
     await _storage.write(key: fullNameKey, value: fullName);
     await _storage.write(key: roleKey, value: role);
+    await _storage.write(key: freeTimeKey, value: freeTime.toString()); // 👈 Added
   }
 
   /// Save parking slip details
@@ -58,7 +60,6 @@ class SecureStorage {
     await _storage.write(key: footerTextKey, value: footerText);
   }
 
-  // Add this method to SecureStorage class
   static Future<void> saveParkingRates(List<dynamic> parkingRates) async {
     final storage = FlutterSecureStorage();
     await storage.write(key: 'parking_rates', value: jsonEncode(parkingRates));
@@ -100,6 +101,12 @@ class SecureStorage {
 
   static Future<String?> getRefreshToken() async {
     return await _storage.read(key: refreshTokenKey);
+  }
+
+  /// Get free time (returns int, defaults to 0 if not set) 👈 Added
+  static Future<int> getFreeTime() async {
+    final value = await _storage.read(key: freeTimeKey);
+    return int.tryParse(value ?? '') ?? 0;
   }
 
   static Future<void> clear() async {

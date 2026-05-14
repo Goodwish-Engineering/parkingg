@@ -46,6 +46,7 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
   String _vehicleNumber = '';
   String _vehicleType = '';
   DateTime? _checkinTime;
+  int freeTime = 0;
 
   @override
   void initState() {
@@ -59,6 +60,7 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
       begin: const Offset(0, 0.12),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
+    fetchfreetime();
   }
 
   @override
@@ -70,6 +72,13 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
   }
 
   // ─── Fee Calculation ──────────────────────────────────────────────────────
+  Future<void> fetchfreetime() async {
+    final value = await SecureStorage.getFreeTime();
+
+    setState(() {
+      freeTime = value;
+    });
+  }
 
   bool get _hasZeroQuarterlyRate =>
       widget.vehicleRates.any((v) => v.quarterHourlyRate == 0.0);
@@ -77,7 +86,13 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
   double? _calculateFee(Map<String, dynamic> data) {
     try {
       final raw = data['checkin_time'] ?? data['checkInTime'];
-      final checkIn = raw is DateTime ? raw : DateTime.parse(raw as String);
+      DateTime checkIn;
+      if (raw is DateTime) {
+        checkIn = raw.isUtc ? raw.toLocal() : raw;
+      } else {
+        final parsed = DateTime.parse(raw as String);
+        checkIn = parsed.isUtc ? parsed.toLocal() : parsed; // ← key fix
+      }
       final type = data['vehicle_type'] as String;
       final now = DateTime.now();
       final minutes = now.difference(checkIn).inMinutes;
@@ -88,13 +103,13 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
       );
 
       if (_hasZeroQuarterlyRate) {
-        if (minutes <= 0) return 0;
+        if (minutes <= freeTime) return 0;
         if (minutes <= 30) return rate.halfHourlyRate;
         final intervals = (minutes / 30).ceil();
         return (intervals ~/ 2) * rate.hourlyRate +
             (intervals % 2) * rate.halfHourlyRate;
       } else {
-        if (minutes <= 0) return 0;
+        if (minutes <= freeTime) return 0;
         if (minutes <= 30) return rate.halfHourlyRate;
         if (minutes <= 60) return rate.hourlyRate;
         final fullHours = ((minutes - 60) / 60).floor();
@@ -181,12 +196,23 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
   }
 
   void _applyResult(Map<String, dynamic> vehicle) {
+    final raw = vehicle['checkin_time']?.toString() ?? '';
+    DateTime? parsedTime;
+
+    if (raw.isNotEmpty) {
+      final dt = DateTime.tryParse(raw);
+      if (dt != null) {
+        // Convert UTC to local (Nepal = UTC+5:45)
+        parsedTime = dt.isUtc ? dt.toLocal() : dt.toLocal();
+      }
+    }
+
     setState(() {
       _result = vehicle;
       _receiptId = vehicle['receipt_id'].toString();
       _vehicleNumber = vehicle['vehicle_number'].toString();
       _vehicleType = vehicle['vehicle_type'].toString();
-      _checkinTime = DateTime.tryParse(vehicle['checkin_time'].toString());
+      _checkinTime = parsedTime;
       _parkingFee = _calculateFee(vehicle);
     });
   }
@@ -230,22 +256,19 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
 
       await _channel.invokeMethod('bindPrinterService');
       await _channel.invokeMethod('initializePrinter');
-      await _channel.invokeMethod(
-          'setPrinterPrintFontSize', {'fontSize': 35});
-      await _channel.invokeMethod(
-          'setPrinterPrintAlignment', {'alignment': 1});
+      await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 35});
+      await _channel.invokeMethod('setPrinterPrintAlignment', {'alignment': 1});
       for (final h in ['heading1', 'heading2', 'heading3', 'heading4']) {
         if ((slip[h] ?? '').isNotEmpty) {
           await _channel.invokeMethod('printText', {'text': slip[h]});
         }
       }
       await _channel.invokeMethod('printerPerformPrint', {'feedLines': 20});
-      await _channel.invokeMethod(
-          'setPrinterPrintFontSize', {'fontSize': 25});
-      await _channel.invokeMethod(
-          'setPrinterPrintAlignment', {'alignment': 0});
+      await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 25});
+      await _channel.invokeMethod('setPrinterPrintAlignment', {'alignment': 0});
       await _channel.invokeMethod('printText', {
-        'text': 'Vehicle Number: $_vehicleNumber\n'
+        'text':
+            'Vehicle Number: $_vehicleNumber\n'
             'Vehicle Type: $_vehicleType\n'
             'Receipt ID: $_receiptId\n'
             'Check-out By: ${slip['full_name'] ?? 'Operator'}\n'
@@ -256,12 +279,11 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
             'Duration: $duration',
       });
       await _channel.invokeMethod('printerPerformPrint', {'feedLines': 20});
-      await _channel.invokeMethod(
-          'setPrinterPrintFontSize', {'fontSize': 40});
-      await _channel.invokeMethod(
-          'setPrinterPrintAlignment', {'alignment': 1});
-      await _channel.invokeMethod(
-          'printText', {'text': 'Total Fee: RS $_parkingFee'});
+      await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 40});
+      await _channel.invokeMethod('setPrinterPrintAlignment', {'alignment': 1});
+      await _channel.invokeMethod('printText', {
+        'text': 'Total Fee: RS $_parkingFee',
+      });
       await _channel.invokeMethod('printerPerformPrint', {'feedLines': 100});
 
       await _dbHelper.updateCheckOutRecord({
@@ -293,12 +315,14 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
 
   void _showSnack(String msg, Color color) {
     ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: color,
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 2),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -365,7 +389,6 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
   }
 }
 
-
 class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -389,8 +412,7 @@ class _SearchBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: .12),
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: Colors.white.withValues(alpha: .3), width: 1),
+        border: Border.all(color: Colors.white.withValues(alpha: .3), width: 1),
       ),
       child: Row(
         children: [
@@ -410,8 +432,7 @@ class _SearchBar extends StatelessWidget {
               ),
               decoration: const InputDecoration(
                 hintText: 'Enter vehicle number…',
-                hintStyle:
-                    TextStyle(color: Colors.white38, fontSize: 14),
+                hintStyle: TextStyle(color: Colors.white38, fontSize: 14),
                 border: InputBorder.none,
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(vertical: 14),
@@ -424,16 +445,18 @@ class _SearchBar extends StatelessWidget {
               onTap: onClear,
               child: Padding(
                 padding: const EdgeInsets.all(10),
-                child: Icon(Icons.close_rounded,
-                    color: Colors.white60, size: 18),
+                child: Icon(
+                  Icons.close_rounded,
+                  color: Colors.white60,
+                  size: 18,
+                ),
               ),
             ),
           GestureDetector(
             onTap: isSearching ? null : onSearch,
             child: Container(
               margin: const EdgeInsets.all(6),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: const Color(0xFF004DE8),
                 borderRadius: BorderRadius.circular(10),
@@ -474,13 +497,15 @@ class _ErrorChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.red.withValues(alpha: .15),
         borderRadius: BorderRadius.circular(10),
-        border:
-            Border.all(color: Colors.red.withValues(alpha: .4), width: 1),
+        border: Border.all(color: Colors.red.withValues(alpha: .4), width: 1),
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline_rounded,
-              color: Colors.redAccent, size: 16),
+          const Icon(
+            Icons.info_outline_rounded,
+            color: Colors.redAccent,
+            size: 16,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -533,24 +558,29 @@ class _VehicleResultCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0D1F52).withValues(alpha: .85),
         borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: Colors.white.withValues(alpha: .12), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: .12),
+          width: 1,
+        ),
       ),
       child: Column(
         children: [
           // ── Header ──
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: .07),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.directions_car_rounded,
-                    color: Colors.white70, size: 18),
+                const Icon(
+                  Icons.directions_car_rounded,
+                  color: Colors.white70,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -563,29 +593,13 @@ class _VehicleResultCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (isOffline)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: .2),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: Colors.orange.withValues(alpha: .5)),
-                    ),
-                    child: const Text(
-                      'OFFLINE',
-                      style: TextStyle(
-                          color: Colors.orange,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8),
-                    ),
-                  ),
+
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: _isCheckedOut
                         ? Colors.green.withValues(alpha: .2)
@@ -616,8 +630,7 @@ class _VehicleResultCard extends StatelessWidget {
           // ── Info rows ──
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -644,12 +657,12 @@ class _VehicleResultCard extends StatelessWidget {
           // ── Fee + Button ──
           if (!_isCheckedOut)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: .05),
-                borderRadius:
-                    const BorderRadius.vertical(bottom: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(16),
+                ),
               ),
               child: Row(
                 children: [
@@ -700,8 +713,11 @@ class _VehicleResultCard extends StatelessWidget {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(Icons.print_rounded,
-                              size: 16, color: Colors.white),
+                          : const Icon(
+                              Icons.print_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            ),
                       label: Text(
                         isPrinting ? 'Printing…' : 'Print Slip',
                         style: const TextStyle(
@@ -747,8 +763,7 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        const Expanded(
-            child: DottedDivider()),
+        const Expanded(child: DottedDivider()),
         const SizedBox(width: 6),
         Text(
           value,
@@ -768,22 +783,24 @@ class DottedDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final count = (constraints.maxWidth / 5).floor();
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: List.generate(
-          count,
-          (_) => Container(
-            width: 2,
-            height: 2,
-            decoration: BoxDecoration(
-              color: Colors.white12,
-              borderRadius: BorderRadius.circular(1),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final count = (constraints.maxWidth / 5).floor();
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(
+            count,
+            (_) => Container(
+              width: 2,
+              height: 2,
+              decoration: BoxDecoration(
+                color: Colors.white12,
+                borderRadius: BorderRadius.circular(1),
+              ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }

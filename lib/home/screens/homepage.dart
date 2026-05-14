@@ -42,6 +42,8 @@ class _HomepageState extends State<Homepage> {
         errorMessage = null;
       });
       final details = await SecureStorage.getParkingRates();
+
+
       final rates = <VehicleRate>[];
       for (final item in details) {
         try {
@@ -104,18 +106,7 @@ class _HomepageState extends State<Homepage> {
         bottom: false,
         child: Column(
           children: [
-            // // ── Title ──────────────────────────────────────────────────────
-            // const Padding(
-            //   padding: EdgeInsets.only(top: 16, bottom: 14),
-            //   child: Text(
-            //     'Select Vehicle for Check-In',
-            //     style: TextStyle(
-            //       fontSize: 18,
-            //       fontWeight: FontWeight.w700,
-            //       color: Colors.white,
-            //     ),
-            //   ),
-            // ),
+            
             SizedBox(height: 20),
             // ── Vehicle Cards (flex 3) ─────────────────────────────────────
             Expanded(
