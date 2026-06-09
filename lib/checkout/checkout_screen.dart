@@ -178,8 +178,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         (v) => v.vehicleType == vehicleType,
         orElse: () => throw Exception('Vehicle type not found'),
       );
-
-      final useSimpleRateStructure = _hasZeroQuarterlyRate();
+      final useSimpleRateStructure = vehicleRate.quarterHourlyRate == 0;
 
       if (useSimpleRateStructure) {
         final hourlyRate = vehicleRate.hourlyRate;
@@ -199,32 +198,45 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         final halfHourlyRate = vehicleRate.halfHourlyRate;
         final hourlyRate = vehicleRate.hourlyRate;
 
-        if (duration <= freeTime) {
+        if (duration <= 0) {
           return 0.0;
-        } else if (duration <= 30) {
-          return halfHourlyRate;
-        } else if (duration <= 60) {
-          return hourlyRate;
-        } else {
-          final fullHours = ((duration - 60) / 60).floor();
-          final extraMinutes = (duration - 60) % 60;
-          return (hourlyRate +
-              fullHours * hourlyRate +
-              ((extraMinutes / 15).ceil() * quarterHourlyRate));
         }
+
+        // Number of completed hours
+        final completedHours = duration ~/ 60;
+
+        // Remaining minutes after full hours
+        final remainingMinutes = duration % 60;
+
+        double total = 0;
+
+        // Base hourly charge
+        if (remainingMinutes == 0) {
+          total = completedHours * hourlyRate;
+        } else {
+          total = (completedHours + 1) * hourlyRate;
+        }
+
+        // Adjust slab pricing
+        if (remainingMinutes > 0 && remainingMinutes <= 15) {
+          total = (completedHours * hourlyRate) + quarterHourlyRate;
+        } else if (remainingMinutes > 15 && remainingMinutes <= 30) {
+          total = (completedHours * hourlyRate) + halfHourlyRate;
+        } else if (remainingMinutes > 30) {
+          total = (completedHours + 1) * hourlyRate;
+        }
+
+        // Minimum 1 hour charge
+        if (total < hourlyRate) {
+          total = hourlyRate;
+        }
+
+        return total;
       }
     } catch (e) {
       print('Error calculating parking fee: $e');
       return null;
     }
-  }
-
-  bool _hasZeroQuarterlyRate() {
-    if (widget.vehicleRates.isEmpty) return false;
-    for (var vehicle in widget.vehicleRates) {
-      if (vehicle.quarterHourlyRate == 0.0) return true;
-    }
-    return false;
   }
 
   Future<void> handleCheckoutAndPrint() async {

@@ -80,9 +80,6 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
     });
   }
 
-  bool get _hasZeroQuarterlyRate =>
-      widget.vehicleRates.any((v) => v.quarterHourlyRate == 0.0);
-
   double? _calculateFee(Map<String, dynamic> data) {
     try {
       final raw = data['checkin_time'] ?? data['checkInTime'];
@@ -95,28 +92,58 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
       }
       final type = data['vehicle_type'] as String;
       final now = DateTime.now();
-      final minutes = now.difference(checkIn).inMinutes;
+      final duration = now.difference(checkIn).inMinutes;
 
       final rate = widget.vehicleRates.firstWhere(
         (v) => v.vehicleType == type,
         orElse: () => throw Exception('Vehicle type not found'),
       );
-
-      if (_hasZeroQuarterlyRate) {
-        if (minutes <= freeTime) return 0;
-        if (minutes <= 30) return rate.halfHourlyRate;
-        final intervals = (minutes / 30).ceil();
+      final useSimpleRateStructure = rate.quarterHourlyRate == 0;
+      if (useSimpleRateStructure) {
+        if (duration <= freeTime) return 0;
+        if (duration <= 30) return rate.halfHourlyRate;
+        final intervals = (duration / 30).ceil();
         return (intervals ~/ 2) * rate.hourlyRate +
             (intervals % 2) * rate.halfHourlyRate;
       } else {
-        if (minutes <= freeTime) return 0;
-        if (minutes <= 30) return rate.halfHourlyRate;
-        if (minutes <= 60) return rate.hourlyRate;
-        final fullHours = ((minutes - 60) / 60).floor();
-        final extra = (minutes - 60) % 60;
-        return rate.hourlyRate +
-            fullHours * rate.hourlyRate +
-            (extra / 15).ceil() * rate.quarterHourlyRate;
+        final quarterHourlyRate = rate.quarterHourlyRate;
+        final halfHourlyRate = rate.halfHourlyRate;
+        final hourlyRate = rate.hourlyRate;
+
+        if (duration <= 0) {
+          return 0.0;
+        }
+
+        // Number of completed hours
+        final completedHours = duration ~/ 60;
+
+        // Remaining minutes after full hours
+        final remainingMinutes = duration % 60;
+
+        double total = 0;
+
+        // Base hourly charge
+        if (remainingMinutes == 0) {
+          total = completedHours * hourlyRate;
+        } else {
+          total = (completedHours + 1) * hourlyRate;
+        }
+
+        // Adjust slab pricing
+        if (remainingMinutes > 0 && remainingMinutes <= 15) {
+          total = (completedHours * hourlyRate) + quarterHourlyRate;
+        } else if (remainingMinutes > 15 && remainingMinutes <= 30) {
+          total = (completedHours * hourlyRate) + halfHourlyRate;
+        } else if (remainingMinutes > 30) {
+          total = (completedHours + 1) * hourlyRate;
+        }
+
+        // Minimum 1 hour charge
+        if (total < hourlyRate) {
+          total = hourlyRate;
+        }
+
+        return total;
       }
     } catch (e) {
       print('Fee calc error: $e');

@@ -11,7 +11,7 @@ class SecureStorage {
   static const roleKey = 'role';
   static const idkey = 'id';
   static const baseUrlKey = 'base_url';
-  static const freeTimeKey = 'free_time'; // 👈 Added
+  static const freeTimeKey = 'free_time'; 
 
   // Parking slip heading keys
   static const heading1Key = 'parking_slip_heading1';
@@ -35,7 +35,7 @@ class SecureStorage {
     required String fullName,
     required String role,
     required String id,
-    required int freeTime, // 👈 Added
+    required int freeTime, 
   }) async {
     await _storage.write(key: idkey, value: id);
     await _storage.write(key: accessTokenKey, value: accessToken);
