@@ -221,7 +221,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}';
   }
 
-  Future<void> handleCheckoutAndPrint() async {
+  Future<void> handleCheckoutAndPrint({required String paymentMethod}) async {
     if (parkingFee == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -299,7 +299,8 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
             'Check-in Time: $formattedCheckinTime\n'
             'Check-out Date: $checkoutDate\n'
             'Check-out Time: $checkoutTime\n'
-            'Duration: $duration',
+            'Duration: $duration\n'
+            'Paid by: ${paymentMethod == 'QR' ? 'QR' : 'Cash'}',
       });
       await _channel.invokeMethod('printerPerformPrint', {'feedLines': 20});
       await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 40});
@@ -315,6 +316,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         'amount': amount,
         'duration': duration,
         'checkedout_by': id,
+        'payment_method': paymentMethod,
       });
 
       final checkOutResponse = await vehicleService.checkOut(
@@ -323,7 +325,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         vehicleType: vehicleType,
         checkoutTime: "$co",
         amount: amount,
-        paymentMethod: 'CASH',
+        paymentMethod: paymentMethod,
       );
 
       print(checkOutResponse);
@@ -331,11 +333,15 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Checkout successful! Slip printed.'),
+        SnackBar(
+          content: Text(
+            '✅ Checkout successful — '
+            '${paymentMethod == 'QR' ? 'QR' : 'Cash'} '
+            'RS ${amount.toStringAsFixed(0)}',
+          ),
           behavior: SnackBarBehavior.floating,
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
       Future.delayed(const Duration(seconds: 1), () {
@@ -357,6 +363,43 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         isLoading = false;
       });
     }
+  }
+
+  Widget _payButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        disabledBackgroundColor: color.withValues(alpha: 0.5),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      onPressed: isLoading ? null : onTap,
+      icon: isLoading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Icon(icon, color: Colors.white),
+      label: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 16,
+        ),
+      ),
+    );
   }
 
   void _resetState() {
@@ -563,37 +606,47 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
                       ),
                     ),
 
-                    // Print Slip Button
+                    // Payment method buttons (Cash / QR)
                     if (!_searchResults[0]['checkout_status'] &&
                         parkingFee != null)
                       Padding(
                         padding: const EdgeInsets.all(16.0),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                        child: Column(
+                          children: [
+                            const Text(
+                              'Tap how the customer paid',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
                               ),
                             ),
-                            onPressed: isLoading
-                                ? null
-                                : handleCheckoutAndPrint,
-                            child: isLoading
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white,
-                                  )
-                                : const Text(
-                                    'PRINT SLIP',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _payButton(
+                                    label: 'CASH',
+                                    icon: Icons.payments,
+                                    color: Colors.green,
+                                    onTap: () => handleCheckoutAndPrint(
+                                      paymentMethod: 'CASH',
                                     ),
                                   ),
-                          ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _payButton(
+                                    label: 'QR',
+                                    icon: Icons.qr_code,
+                                    color: const Color(0xFF004DE8),
+                                    onTap: () => handleCheckoutAndPrint(
+                                      paymentMethod: 'QR',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                   ],
