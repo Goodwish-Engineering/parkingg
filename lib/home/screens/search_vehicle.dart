@@ -327,6 +327,7 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
         vehicleType: _vehicleType,
         checkoutTime: now.toString(),
         amount: _parkingFee!,
+        paymentMethod: 'CASH',
       );
 
       if (!mounted) return;

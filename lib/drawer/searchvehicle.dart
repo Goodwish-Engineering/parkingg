@@ -323,6 +323,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         vehicleType: vehicleType,
         checkoutTime: "$co",
         amount: amount,
+        paymentMethod: 'CASH',
       );
 
       print(checkOutResponse);

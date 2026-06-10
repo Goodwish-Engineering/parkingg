@@ -239,7 +239,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     }
   }
 
-  Future<void> handleCheckoutAndPrint() async {
+  Future<void> handleCheckoutAndPrint({required String paymentMethod}) async {
     if (ticketData == null || parkingFee == null) return;
 
     setState(() => isLoading = true);
@@ -260,6 +260,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         checkInTime: checkInTime,
         checkoutTime: checkoutTime,
         amount: amount,
+        paymentMethod: paymentMethod,
       );
 
       await _dbHelper.updateCheckOutRecord({
@@ -269,6 +270,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         'amount': amount,
         'checkin_time': checkInTime.toString(),
         'duration': '${checkoutTime.difference(checkInTime).inMinutes} mins',
+        'payment_method': paymentMethod,
       });
 
       final response = await vehicleService.checkOut(
@@ -277,13 +279,18 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         vehicleType: vehicleType,
         checkoutTime: checkoutTime.toString(),
         amount: amount,
+        paymentMethod: paymentMethod,
       );
 
       print('Checkout response: $response');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Checkout successful!'),
+          content: Text(
+            'Checkout successful — '
+            '${paymentMethod == 'QR' ? 'QR' : 'Cash'} '
+            'Rs. ${amount.toStringAsFixed(0)}',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -308,6 +315,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     required DateTime checkInTime,
     required DateTime checkoutTime,
     required double amount,
+    required String paymentMethod,
   }) async {
     try {
       // Get heading details from parkingSlipDetails
@@ -343,6 +351,7 @@ Check-out BY: $fullName
 Check-in: ${DateFormat('yyyy/MM/dd HH:mm').format(checkInTime)}
 Check-out: ${DateFormat('yyyy/MM/dd HH:mm').format(checkoutTime)}
 Duration: ${checkoutTime.difference(checkInTime).inHours}h ${checkoutTime.difference(checkInTime).inMinutes.remainder(60)}m
+Paid by: ${paymentMethod == 'QR' ? 'QR' : 'Cash'}
 ''',
       });
 
@@ -427,22 +436,109 @@ Duration: ${checkoutTime.difference(checkInTime).inHours}h ${checkoutTime.differ
                 ),
               ),
 
-              // Checkout button
+              // Payment method buttons
               if (_shouldShowDetails && ticketData != null)
                 Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: Size(double.infinity, 50),
-                      backgroundColor: Colors.green,
-                    ),
-                    onPressed: isLoading ? null : handleCheckoutAndPrint,
-                    child: isLoading
-                        ? CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            'PRINT & CHECKOUT',
-                            style: TextStyle(fontSize: 18, color: Colors.white),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Tap how the customer paid',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 14, color: Colors.white70),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 70,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  disabledBackgroundColor: Colors.green
+                                      .withValues(alpha: 0.5),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                icon: isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.payments,
+                                        color: Colors.white,
+                                      ),
+                                label: const Text(
+                                  'CASH',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onPressed: isLoading
+                                    ? null
+                                    : () => handleCheckoutAndPrint(
+                                        paymentMethod: 'CASH',
+                                      ),
+                              ),
+                            ),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 70,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF004DE8),
+                                  disabledBackgroundColor: const Color(
+                                    0xFF004DE8,
+                                  ).withValues(alpha: 0.5),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                icon: isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.qr_code,
+                                        color: Colors.white,
+                                      ),
+                                label: const Text(
+                                  'QR',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onPressed: isLoading
+                                    ? null
+                                    : () => handleCheckoutAndPrint(
+                                        paymentMethod: 'QR',
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
             ],
