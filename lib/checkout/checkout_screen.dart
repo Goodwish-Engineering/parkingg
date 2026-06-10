@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:parking/api/checkincheckout.dart';
+import 'package:parking/auth/auth_service.dart';
 import 'package:parking/database/helper_class.dart';
 import 'package:parking/home/models/vehicleratemodel.dart';
 import 'package:parking/home/screens/homepage.dart';
@@ -40,6 +41,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
   final bool _showCamera = true;
   final DatabaseHelper _dbHelper = DatabaseHelper();
   final VehicleService vehicleService = VehicleService();
+  int freeTime = 0;
 
   @override
   void initState() {
@@ -48,6 +50,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     _initializeCamera();
     _setupScannerListener();
     _initPrinter();
+    fetchfreetime();
   }
 
   @override
@@ -55,6 +58,14 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     WidgetsBinding.instance.removeObserver(this);
     // Do NOT dispose _cameraController here since it's managed by CameraManager
     super.dispose();
+  }
+
+  Future<void> fetchfreetime() async {
+    final value = await SecureStorage.getFreeTime();
+
+    setState(() {
+      freeTime = value;
+    });
   }
 
   Future<void> _initializeCamera() async {
@@ -167,14 +178,13 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         (v) => v.vehicleType == vehicleType,
         orElse: () => throw Exception('Vehicle type not found'),
       );
-
-      final useSimpleRateStructure = _hasZeroQuarterlyRate();
+      final useSimpleRateStructure = vehicleRate.quarterHourlyRate == 0;
 
       if (useSimpleRateStructure) {
         final hourlyRate = vehicleRate.hourlyRate;
         final halfHourlyRate = vehicleRate.halfHourlyRate;
 
-        if (duration <= 0) {
+        if (duration <= freeTime) {
           return 0.0;
         } else if (duration <= 30) {
           return halfHourlyRate;
@@ -190,17 +200,38 @@ class _CheckoutScreenState extends State<CheckoutScreen>
 
         if (duration <= 0) {
           return 0.0;
-        } else if (duration <= 30) {
-          return halfHourlyRate;
-        } else if (duration <= 60) {
-          return hourlyRate;
-        } else {
-          final fullHours = ((duration - 60) / 60).floor();
-          final extraMinutes = (duration - 60) % 60;
-          return (hourlyRate +
-              fullHours * hourlyRate +
-              ((extraMinutes / 15).ceil() * quarterHourlyRate));
         }
+
+        // Number of completed hours
+        final completedHours = duration ~/ 60;
+
+        // Remaining minutes after full hours
+        final remainingMinutes = duration % 60;
+
+        double total = 0;
+
+        // Base hourly charge
+        if (remainingMinutes == 0) {
+          total = completedHours * hourlyRate;
+        } else {
+          total = (completedHours + 1) * hourlyRate;
+        }
+
+        // Adjust slab pricing
+        if (remainingMinutes > 0 && remainingMinutes <= 15) {
+          total = (completedHours * hourlyRate) + quarterHourlyRate;
+        } else if (remainingMinutes > 15 && remainingMinutes <= 30) {
+          total = (completedHours * hourlyRate) + halfHourlyRate;
+        } else if (remainingMinutes > 30) {
+          total = (completedHours + 1) * hourlyRate;
+        }
+
+        // Minimum 1 hour charge
+        if (total < hourlyRate) {
+          total = hourlyRate;
+        }
+
+        return total;
       }
     } catch (e) {
       print('Error calculating parking fee: $e');
@@ -208,15 +239,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     }
   }
 
-  bool _hasZeroQuarterlyRate() {
-    if (widget.vehicleRates.isEmpty) return false;
-    for (var vehicle in widget.vehicleRates) {
-      if (vehicle.quarterHourlyRate == 0.0) return true;
-    }
-    return false;
-  }
-
-  Future<void> handleCheckoutAndPrint() async {
+  Future<void> handleCheckoutAndPrint({required String paymentMethod}) async {
     if (ticketData == null || parkingFee == null) return;
 
     setState(() => isLoading = true);
@@ -237,6 +260,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         checkInTime: checkInTime,
         checkoutTime: checkoutTime,
         amount: amount,
+        paymentMethod: paymentMethod,
       );
 
       await _dbHelper.updateCheckOutRecord({
@@ -246,6 +270,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         'amount': amount,
         'checkin_time': checkInTime.toString(),
         'duration': '${checkoutTime.difference(checkInTime).inMinutes} mins',
+        'payment_method': paymentMethod,
       });
 
       final response = await vehicleService.checkOut(
@@ -254,13 +279,18 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         vehicleType: vehicleType,
         checkoutTime: checkoutTime.toString(),
         amount: amount,
+        paymentMethod: paymentMethod,
       );
 
       print('Checkout response: $response');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Checkout successful!'),
+          content: Text(
+            'Checkout successful — '
+            '${paymentMethod == 'QR' ? 'QR' : 'Cash'} '
+            'Rs. ${amount.toStringAsFixed(0)}',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -285,6 +315,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     required DateTime checkInTime,
     required DateTime checkoutTime,
     required double amount,
+    required String paymentMethod,
   }) async {
     try {
       // Get heading details from parkingSlipDetails
@@ -320,6 +351,7 @@ Check-out BY: $fullName
 Check-in: ${DateFormat('yyyy/MM/dd HH:mm').format(checkInTime)}
 Check-out: ${DateFormat('yyyy/MM/dd HH:mm').format(checkoutTime)}
 Duration: ${checkoutTime.difference(checkInTime).inHours}h ${checkoutTime.difference(checkInTime).inMinutes.remainder(60)}m
+Paid by: ${paymentMethod == 'QR' ? 'QR' : 'Cash'}
 ''',
       });
 
@@ -404,22 +436,109 @@ Duration: ${checkoutTime.difference(checkInTime).inHours}h ${checkoutTime.differ
                 ),
               ),
 
-              // Checkout button
+              // Payment method buttons
               if (_shouldShowDetails && ticketData != null)
                 Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: Size(double.infinity, 50),
-                      backgroundColor: Colors.green,
-                    ),
-                    onPressed: isLoading ? null : handleCheckoutAndPrint,
-                    child: isLoading
-                        ? CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            'PRINT & CHECKOUT',
-                            style: TextStyle(fontSize: 18, color: Colors.white),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Tap how the customer paid',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 14, color: Colors.white70),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 70,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  disabledBackgroundColor: Colors.green
+                                      .withValues(alpha: 0.5),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                icon: isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.payments,
+                                        color: Colors.white,
+                                      ),
+                                label: const Text(
+                                  'CASH',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onPressed: isLoading
+                                    ? null
+                                    : () => handleCheckoutAndPrint(
+                                        paymentMethod: 'CASH',
+                                      ),
+                              ),
+                            ),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 70,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF004DE8),
+                                  disabledBackgroundColor: const Color(
+                                    0xFF004DE8,
+                                  ).withValues(alpha: 0.5),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                icon: isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.qr_code,
+                                        color: Colors.white,
+                                      ),
+                                label: const Text(
+                                  'QR',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onPressed: isLoading
+                                    ? null
+                                    : () => handleCheckoutAndPrint(
+                                        paymentMethod: 'QR',
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
             ],

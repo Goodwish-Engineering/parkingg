@@ -1,4 +1,3 @@
-// ignore_for_file: avoid_print
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -16,7 +15,7 @@ void main() async {
   if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
     ApiEndpoints.baseUrl = savedBaseUrl;
   }
-  String? token = await storage.read(key: "access_token");
+  String? token = await storage.read(key: "access_token");  
   SyncService().startAutoSync();
   await CameraManager().initialize();
   runApp(MyApp(isLoggedIn: token != null));
@@ -53,8 +52,7 @@ class CameraManager {
         await _controller!.initialize();
         _isInitialized = true;
       }
-    } catch (e) {
-      print("Camera initialization error: $e");
+    } catch (_) {
     }
   }
 

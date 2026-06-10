@@ -52,6 +52,7 @@ class VehicleService {
     required String vehicleType,
     required String checkoutTime,
     required double amount,
+    required String paymentMethod,
   }) async {
     final url = Uri.parse('${ApiEndpoints.baseUrl}parkinginfo/checkout/');
     final body = json.encode({
@@ -60,6 +61,7 @@ class VehicleService {
       'vehicle_type': vehicleType,
       'checkout_time': checkoutTime,
       'amount': amount,
+      'payment_method': paymentMethod,
     });
 
     try {

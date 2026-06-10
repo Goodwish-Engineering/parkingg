@@ -23,7 +23,18 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     Directory documentsDirectory = await getApplicationDocumentsDirectory();
     String path = join(documentsDirectory.path, 'parking_data.db');
-    return await openDatabase(path, version: 1, onCreate: _onCreate);
+    return await openDatabase(
+      path,
+      version: 2,
+      onCreate: _onCreate,
+      onUpgrade: (db, oldV, newV) async {
+        if (oldV < 2) {
+          await db.execute(
+            'ALTER TABLE parking_records ADD COLUMN payment_method TEXT',
+          );
+        }
+      },
+    );
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -40,7 +51,8 @@ class DatabaseHelper {
         amount REAL,
         duration TEXT,
         is_synced INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        payment_method TEXT
       )
     ''');
   }
@@ -80,6 +92,7 @@ class DatabaseHelper {
           'checkedout_by': record['checkedout_by'],
           'amount': record['amount'],
           'duration': record['duration'],
+          'payment_method': record['payment_method'],
           'is_synced': 0,
         },
         where: 'receipt_id = ?',
@@ -126,6 +139,7 @@ class DatabaseHelper {
       'checkedout_by',
       'amount',
       'duration',
+      'payment_method',
     ]);
 
     // Add records
@@ -140,6 +154,7 @@ class DatabaseHelper {
         record['checkedout_by'],
         record['amount'],
         record['duration'],
+        record['payment_method'],
       ]);
     }
 

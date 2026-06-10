@@ -35,6 +35,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
   String vehicleNumber = "";
   String vehicleType = "";
   DateTime? co;
+  int freeTime = 0;
 
   // Add state variables to store fetched data
   List<VehicleRate> vehicleRates = [];
@@ -58,14 +59,13 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         (v) => v.vehicleType == vehicleType,
         orElse: () => throw Exception('Vehicle type not found'),
       );
-
-      final useSimpleRateStructure = _hasZeroQuarterlyRate();
+      final useSimpleRateStructure = vehicleRate.quarterHourlyRate == 0;
 
       if (useSimpleRateStructure) {
         final hourlyRate = vehicleRate.hourlyRate;
         final halfHourlyRate = vehicleRate.halfHourlyRate;
 
-        if (duration <= 0) {
+        if (duration <= freeTime) {
           return 0.0;
         } else if (duration <= 30) {
           return halfHourlyRate;
@@ -81,30 +81,43 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
 
         if (duration <= 0) {
           return 0.0;
-        } else if (duration <= 30) {
-          return halfHourlyRate;
-        } else if (duration <= 60) {
-          return hourlyRate;
-        } else {
-          final fullHours = ((duration - 60) / 60).floor();
-          final extraMinutes = (duration - 60) % 60;
-          return (hourlyRate +
-              fullHours * hourlyRate +
-              ((extraMinutes / 15).ceil() * quarterHourlyRate));
         }
+
+        // Number of completed hours
+        final completedHours = duration ~/ 60;
+
+        // Remaining minutes after full hours
+        final remainingMinutes = duration % 60;
+
+        double total = 0;
+
+        // Base hourly charge
+        if (remainingMinutes == 0) {
+          total = completedHours * hourlyRate;
+        } else {
+          total = (completedHours + 1) * hourlyRate;
+        }
+
+        // Adjust slab pricing
+        if (remainingMinutes > 0 && remainingMinutes <= 15) {
+          total = (completedHours * hourlyRate) + quarterHourlyRate;
+        } else if (remainingMinutes > 15 && remainingMinutes <= 30) {
+          total = (completedHours * hourlyRate) + halfHourlyRate;
+        } else if (remainingMinutes > 30) {
+          total = (completedHours + 1) * hourlyRate;
+        }
+
+        // Minimum 1 hour charge
+        if (total < hourlyRate) {
+          total = hourlyRate;
+        }
+
+        return total;
       }
     } catch (e) {
       print('Error calculating parking fee: $e');
       return null;
     }
-  }
-
-  bool _hasZeroQuarterlyRate() {
-    if (vehicleRates.isEmpty) return false;
-    for (var vehicle in vehicleRates) {
-      if (vehicle.quarterHourlyRate == 0.0) return true;
-    }
-    return false;
   }
 
   @override
@@ -208,7 +221,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}';
   }
 
-  Future<void> handleCheckoutAndPrint() async {
+  Future<void> handleCheckoutAndPrint({required String paymentMethod}) async {
     if (parkingFee == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -265,8 +278,6 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
             '${difference.inHours}h ${difference.inMinutes.remainder(60)}m';
       }
 
-      await _channel.invokeMethod('bindPrinterService');
-      await _channel.invokeMethod('initializePrinter');
       await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 35});
       await _channel.invokeMethod('setPrinterPrintAlignment', {'alignment': 1});
       await _channel.invokeMethod('printText', {'text': heading1});
@@ -286,7 +297,8 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
             'Check-in Time: $formattedCheckinTime\n'
             'Check-out Date: $checkoutDate\n'
             'Check-out Time: $checkoutTime\n'
-            'Duration: $duration',
+            'Duration: $duration\n'
+            'Paid by: ${paymentMethod == 'QR' ? 'QR' : 'Cash'}',
       });
       await _channel.invokeMethod('printerPerformPrint', {'feedLines': 20});
       await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 40});
@@ -302,6 +314,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         'amount': amount,
         'duration': duration,
         'checkedout_by': id,
+        'payment_method': paymentMethod,
       });
 
       final checkOutResponse = await vehicleService.checkOut(
@@ -310,6 +323,7 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
         vehicleType: vehicleType,
         checkoutTime: "$co",
         amount: amount,
+        paymentMethod: paymentMethod,
       );
 
       print(checkOutResponse);
@@ -317,11 +331,15 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Checkout successful! Slip printed.'),
+        SnackBar(
+          content: Text(
+            '✅ Checkout successful — '
+            '${paymentMethod == 'QR' ? 'QR' : 'Cash'} '
+            'RS ${amount.toStringAsFixed(0)}',
+          ),
           behavior: SnackBarBehavior.floating,
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
       Future.delayed(const Duration(seconds: 1), () {
@@ -345,6 +363,43 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
     }
   }
 
+  Widget _payButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        disabledBackgroundColor: color.withValues(alpha: 0.5),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      onPressed: isLoading ? null : onTap,
+      icon: isLoading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Icon(icon, color: Colors.white),
+      label: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 16,
+        ),
+      ),
+    );
+  }
+
   void _resetState() {
     setState(() {
       _searchResults = [];
@@ -363,6 +418,27 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
   void initState() {
     super.initState();
     fetchvehilceratesandprintdetails();
+    fetchfreetime();
+    _initPrinter();
+  }
+
+  // Bind + initialize the printer once when the screen opens, so each
+  // checkout doesn't pay the bind/init cost again.
+  Future<void> _initPrinter() async {
+    try {
+      await _channel.invokeMethod('bindPrinterService');
+      await _channel.invokeMethod('initializePrinter');
+    } catch (e) {
+      print('Printer init error: $e');
+    }
+  }
+
+  Future<void> fetchfreetime() async {
+    final value = await SecureStorage.getFreeTime();
+
+    setState(() {
+      freeTime = value;
+    });
   }
 
   Future<void> fetchvehilceratesandprintdetails() async {
@@ -540,37 +616,47 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
                       ),
                     ),
 
-                    // Print Slip Button
+                    // Payment method buttons (Cash / QR)
                     if (!_searchResults[0]['checkout_status'] &&
                         parkingFee != null)
                       Padding(
                         padding: const EdgeInsets.all(16.0),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                        child: Column(
+                          children: [
+                            const Text(
+                              'Tap how the customer paid',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
                               ),
                             ),
-                            onPressed: isLoading
-                                ? null
-                                : handleCheckoutAndPrint,
-                            child: isLoading
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white,
-                                  )
-                                : const Text(
-                                    'PRINT SLIP',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _payButton(
+                                    label: 'CASH',
+                                    icon: Icons.payments,
+                                    color: Colors.green,
+                                    onTap: () => handleCheckoutAndPrint(
+                                      paymentMethod: 'CASH',
                                     ),
                                   ),
-                          ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _payButton(
+                                    label: 'QR',
+                                    icon: Icons.qr_code,
+                                    color: const Color(0xFF004DE8),
+                                    onTap: () => handleCheckoutAndPrint(
+                                      paymentMethod: 'QR',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                   ],
