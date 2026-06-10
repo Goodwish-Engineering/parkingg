@@ -278,8 +278,6 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
             '${difference.inHours}h ${difference.inMinutes.remainder(60)}m';
       }
 
-      await _channel.invokeMethod('bindPrinterService');
-      await _channel.invokeMethod('initializePrinter');
       await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 35});
       await _channel.invokeMethod('setPrinterPrintAlignment', {'alignment': 1});
       await _channel.invokeMethod('printText', {'text': heading1});
@@ -421,6 +419,18 @@ class _SearchLostVehicleScreenState extends State<SearchLostVehicleScreen> {
     super.initState();
     fetchvehilceratesandprintdetails();
     fetchfreetime();
+    _initPrinter();
+  }
+
+  // Bind + initialize the printer once when the screen opens, so each
+  // checkout doesn't pay the bind/init cost again.
+  Future<void> _initPrinter() async {
+    try {
+      await _channel.invokeMethod('bindPrinterService');
+      await _channel.invokeMethod('initializePrinter');
+    } catch (e) {
+      print('Printer init error: $e');
+    }
   }
 
   Future<void> fetchfreetime() async {

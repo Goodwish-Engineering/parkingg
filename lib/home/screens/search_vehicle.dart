@@ -61,6 +61,18 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
     fetchfreetime();
+    _initPrinter();
+  }
+
+  // Bind + initialize the printer once when the screen opens, so each
+  // checkout doesn't pay the bind/init cost again.
+  Future<void> _initPrinter() async {
+    try {
+      await _channel.invokeMethod('bindPrinterService');
+      await _channel.invokeMethod('initializePrinter');
+    } catch (e) {
+      print('Printer init error: $e');
+    }
   }
 
   @override
@@ -281,8 +293,6 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
           '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
           '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
 
-      await _channel.invokeMethod('bindPrinterService');
-      await _channel.invokeMethod('initializePrinter');
       await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 35});
       await _channel.invokeMethod('setPrinterPrintAlignment', {'alignment': 1});
       for (final h in ['heading1', 'heading2', 'heading3', 'heading4']) {
