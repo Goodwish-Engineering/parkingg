@@ -257,7 +257,7 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
 
   // ─── Checkout & Print ─────────────────────────────────────────────────────
 
-  Future<void> _handleCheckoutAndPrint() async {
+  Future<void> _handleCheckoutAndPrint({required String paymentMethod}) async {
     if (_parkingFee == null) return;
     setState(() => _isPrinting = true);
 
@@ -303,7 +303,8 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
             'Check-in Time: $checkinHour\n'
             'Check-out Date: $checkoutDate\n'
             'Check-out Time: $checkoutTime\n'
-            'Duration: $duration',
+            'Duration: $duration\n'
+            'Paid by: ${paymentMethod == 'QR' ? 'QR' : 'Cash'}',
       });
       await _channel.invokeMethod('printerPerformPrint', {'feedLines': 20});
       await _channel.invokeMethod('setPrinterPrintFontSize', {'fontSize': 40});
@@ -319,6 +320,7 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
         'amount': _parkingFee,
         'duration': duration,
         'checkedout_by': slip['id'],
+        'payment_method': paymentMethod,
       });
 
       await VehicleService().checkOut(
@@ -327,11 +329,16 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
         vehicleType: _vehicleType,
         checkoutTime: now.toString(),
         amount: _parkingFee!,
-        paymentMethod: 'CASH',
+        paymentMethod: paymentMethod,
       );
 
       if (!mounted) return;
-      _showSnack('✅ Checkout successful! Slip printed.', Colors.green);
+      _showSnack(
+        '✅ Checkout successful — '
+        '${paymentMethod == 'QR' ? 'QR' : 'Cash'} '
+        'RS ${_parkingFee!.toStringAsFixed(0)}',
+        Colors.green,
+      );
       Future.delayed(const Duration(seconds: 1), _clear);
     } catch (e) {
       if (!mounted) return;
@@ -406,7 +413,8 @@ class _SearchVehicleWidgetState extends State<SearchVehicleWidget>
                     checkinTime: _checkinTime,
                     isOffline: _isOffline,
                     isPrinting: _isPrinting,
-                    onCheckout: _handleCheckoutAndPrint,
+                    onCheckout: (method) =>
+                        _handleCheckoutAndPrint(paymentMethod: method),
                   ),
                 ),
               ),
@@ -553,7 +561,7 @@ class _VehicleResultCard extends StatelessWidget {
   final DateTime? checkinTime;
   final bool isOffline;
   final bool isPrinting;
-  final VoidCallback onCheckout;
+  final void Function(String paymentMethod) onCheckout;
 
   const _VehicleResultCard({
     required this.result,
@@ -692,74 +700,125 @@ class _VehicleResultCard extends StatelessWidget {
                   bottom: Radius.circular(16),
                 ),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      const Text(
-                        'TOTAL FEE',
-                        style: TextStyle(
-                          color: Colors.white38,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'TOTAL FEE',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            parkingFee != null
+                                ? 'RS ${parkingFee!.toStringAsFixed(0)}'
+                                : '—',
+                            style: const TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        parkingFee != null
-                            ? 'RS ${parkingFee!.toStringAsFixed(0)}'
-                            : '—',
-                        style: const TextStyle(
-                          color: Colors.greenAccent,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
-                        ),
+                      const Spacer(),
+                      const Text(
+                        'Tap how the\ncustomer paid',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(color: Colors.white38, fontSize: 10),
                       ),
                     ],
                   ),
-                  const Spacer(),
-                  SizedBox(
-                    height: 44,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFDC5100),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                      ),
-                      onPressed: isPrinting ? null : onCheckout,
-                      icon: isPrinting
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.print_rounded,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                      label: Text(
-                        isPrinting ? 'Printing…' : 'Print Slip',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _PayButton(
+                          label: 'CASH',
+                          icon: Icons.payments,
+                          color: Colors.green,
+                          isBusy: isPrinting,
+                          onTap: () => onCheckout('CASH'),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _PayButton(
+                          label: 'QR',
+                          icon: Icons.qr_code,
+                          color: const Color(0xFF004DE8),
+                          isBusy: isPrinting,
+                          onTap: () => onCheckout('QR'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _PayButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool isBusy;
+  final VoidCallback onTap;
+
+  const _PayButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.isBusy,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          disabledBackgroundColor: color.withValues(alpha: 0.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: isBusy ? null : onTap,
+        icon: isBusy
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Icon(icon, size: 18, color: Colors.white),
+        label: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 15,
+          ),
+        ),
       ),
     );
   }
