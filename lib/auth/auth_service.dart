@@ -61,13 +61,11 @@ class SecureStorage {
   }
 
   static Future<void> saveParkingRates(List<dynamic> parkingRates) async {
-    final storage = FlutterSecureStorage();
-    await storage.write(key: 'parking_rates', value: jsonEncode(parkingRates));
+    await _storage.write(key: 'parking_rates', value: jsonEncode(parkingRates));
   }
 
   static Future<List<dynamic>> getParkingRates() async {
-    final storage = FlutterSecureStorage();
-    final rates = await storage.read(key: 'parking_rates');
+    final rates = await _storage.read(key: 'parking_rates');
     if (rates != null) {
       return jsonDecode(rates);
     }
