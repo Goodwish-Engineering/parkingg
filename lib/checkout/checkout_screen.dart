@@ -7,7 +7,6 @@ import 'package:parking/api/checkincheckout.dart';
 import 'package:parking/auth/auth_service.dart';
 import 'package:parking/database/helper_class.dart';
 import 'package:parking/home/models/vehicleratemodel.dart';
-import 'package:parking/home/screens/homepage.dart';
 import 'package:parking/main.dart';
 import 'package:intl/intl.dart';
 
@@ -35,6 +34,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
   bool isLoading = false;
   bool _isProcessingScan = false;
   bool _shouldShowDetails = false;
+  bool _alreadyCheckedOut = false;
   String? apiResponseMessage;
   CameraController? _cameraController;
   bool _isCameraInitialized = false;
@@ -135,6 +135,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         ticketData = parsedData;
         parkingFee = calculateParkingFee(parsedData)?.toDouble();
         _shouldShowDetails = true;
+        _alreadyCheckedOut = false;
       });
     } catch (e) {
       print('Scan processing error: $e');
@@ -241,6 +242,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
 
   Future<void> handleCheckoutAndPrint({required String paymentMethod}) async {
     if (ticketData == null || parkingFee == null) return;
+    if (_alreadyCheckedOut) return;
 
     setState(() => isLoading = true);
 
@@ -253,6 +255,44 @@ class _CheckoutScreenState extends State<CheckoutScreen>
       final checkInTime = ticketData!['checkInTime'] as DateTime;
       final amount = parkingFee!;
 
+      // 1) Ask the backend to check out FIRST. The server rejects an already
+      //    checked-out receipt ("Vehicle already checked out"), so we never
+      //    print a duplicate bill or record a duplicate for a closed receipt.
+      //    VehicleService.checkOut() returns the decoded body on success, a
+      //    map WITH 'status_code' on an HTTP error, and a map with only
+      //    'error' (no 'status_code') on a network failure (offline).
+      final response = await vehicleService.checkOut(
+        receiptId: receiptId,
+        vehicleNumber: vehicleNumber,
+        vehicleType: vehicleType,
+        checkoutTime: checkoutTime.toString(),
+        amount: amount,
+        paymentMethod: paymentMethod,
+      );
+      print('Checkout response: $response');
+
+      final bool serverRejected = response.containsKey('status_code');
+      if (serverRejected) {
+        final body = (response['response_body'] ?? '').toString().toLowerCase();
+        final bool alreadyOut = body.contains('already checked out');
+        if (!mounted) return;
+        if (alreadyOut) setState(() => _alreadyCheckedOut = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              alreadyOut
+                  ? 'This receipt is already checked out — cannot check out again.'
+                  : 'Checkout was rejected by the server. Please retry.',
+            ),
+            backgroundColor: alreadyOut ? Colors.orange : Colors.red,
+          ),
+        );
+        return; // do NOT print or record a duplicate
+      }
+
+      // 2) Success (2xx) OR offline (network error) -> finalize locally.
+      //    Offline-first: when the server is unreachable we still print and
+      //    record, and the CSV sync reconciles later.
       await _printReceipt(
         vehicleNumber: vehicleNumber,
         vehicleType: vehicleType,
@@ -273,16 +313,6 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         'payment_method': paymentMethod,
       });
 
-      final response = await vehicleService.checkOut(
-        receiptId: receiptId,
-        vehicleNumber: vehicleNumber,
-        vehicleType: vehicleType,
-        checkoutTime: checkoutTime.toString(),
-        amount: amount,
-        paymentMethod: paymentMethod,
-      );
-
-      print('Checkout response: $response');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -297,6 +327,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
 
       gotoHome();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Checkout failed: ${e.toString()}'),
@@ -304,7 +335,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         ),
       );
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -374,10 +405,10 @@ Paid by: ${paymentMethod == 'QR' ? 'QR' : 'Cash'}
   }
 
   void gotoHome() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => Homepage()),
-    );
+    // Return to the AppShell (which draws the top nav bar) instead of pushing
+    // a bare Homepage with no header. CheckoutScreen was pushed on top of the
+    // AppShell, so popping back to the first route restores the nav bar.
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
@@ -436,8 +467,43 @@ Paid by: ${paymentMethod == 'QR' ? 'QR' : 'Cash'}
                 ),
               ),
 
-              // Payment method buttons
-              if (_shouldShowDetails && ticketData != null)
+              // Already-checked-out banner (read-only — no checkout allowed)
+              if (_shouldShowDetails && ticketData != null && _alreadyCheckedOut)
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.white),
+                        SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Already checked out — view only',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Payment method buttons (hidden once already checked out)
+              if (_shouldShowDetails &&
+                  ticketData != null &&
+                  !_alreadyCheckedOut)
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
