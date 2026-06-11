@@ -48,6 +48,7 @@ class _AppShellState extends State<AppShell> {
             children: [
               _AppHeader(
                 onMenuTap: () => _scaffoldKey.currentState?.openEndDrawer(),
+                onSearchTap: () => setState(() => selectedIndex = 1),
               ),
               Expanded(child: screens[selectedIndex]),
             ],
@@ -60,8 +61,9 @@ class _AppShellState extends State<AppShell> {
 
 class _AppHeader extends StatelessWidget {
   final VoidCallback onMenuTap;
+  final VoidCallback onSearchTap;
 
-  const _AppHeader({required this.onMenuTap});
+  const _AppHeader({required this.onMenuTap, required this.onSearchTap});
 
   @override
   Widget build(BuildContext context) {
@@ -73,13 +75,24 @@ class _AppHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Image.asset("assets/goodwish.png", height: 40),
-          CircleAvatar(
-            radius: 19,
-            backgroundColor: Colors.white,
-            child: IconButton(
-              icon: const Icon(Icons.menu, color: Colors.black),
-              onPressed: onMenuTap,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.search, color: Colors.white),
+                tooltip: 'Search vehicle',
+                onPressed: onSearchTap,
+              ),
+              const SizedBox(width: 4),
+              CircleAvatar(
+                radius: 19,
+                backgroundColor: Colors.white,
+                child: IconButton(
+                  icon: const Icon(Icons.menu, color: Colors.black),
+                  onPressed: onMenuTap,
+                ),
+              ),
+            ],
           ),
         ],
       ),
