@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:parking/auth/auth_service.dart';
 import 'package:parking/checkout/checkout_screen.dart';
 import 'package:parking/home/models/vehicleratemodel.dart';
-import 'package:parking/home/screens/search_vehicle.dart';
 import 'package:parking/home/screens/vehicle_input.dart';
 import 'package:parking/home/screens/vehiclecard.dart';
 
@@ -108,21 +107,11 @@ class _HomepageState extends State<Homepage> {
           children: [
             
             SizedBox(height: 20),
-            // ── Vehicle Cards (flex 3) ─────────────────────────────────────
+            // ── Vehicle Cards ─────────────────────────────────────────────
             Expanded(
-              flex: 3,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _buildVehicleGrid(),
-              ),
-            ),
-
-            // ── Search Section (flex 4) ────────────────────────────────────
-            Expanded(
-              flex: 5,
-              child: SearchVehicleWidget(
-                vehicleRates: vehicleRates,
-                parkingSlipDetails: parkingSlipDetails,
               ),
             ),
 
@@ -197,14 +186,14 @@ class _HomepageState extends State<Homepage> {
     }
 
     return GridView.builder(
-      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 4),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 10,
         childAspectRatio: 1.1,
       ),
-      itemCount: vehicleRates.length.clamp(0, 2), // cap at 2 as required
+      itemCount: vehicleRates.length,
       itemBuilder: (context, index) => VehicleCardWidget(
         vehicleRate: vehicleRates[index],
         onTap: () => _navigateToDetails(vehicleRates[index]),
